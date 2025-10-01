@@ -149,22 +149,20 @@ class Airthings:
 
         # TODO: Clean up sensors before updating
 
-        # Update sensors
         sensors_data: list[dict[str, Any]] = []
         for account_id in self._accounts:
             sensors_data += await self.get_sensors(
                 account_id, is_metric=is_metric
             ) or []
-
-        # Map sensors_data to devices
+        
         for device in self._devices.values():
             device.sensors = {}
             for sensor in sensors_data:
                 if sensor.get("serialNumber") == device.serial_number:
-                    logging.warning("Found sensor data for device %s: %s", device.serial_number, sensor)
+                    device.update_sensors(sensor.get("sensors", {}))
         return self._devices
 
-    async def get_accounts(self) -> dict[str] | None:
+    async def get_accounts(self) -> list[str] | None:
         """Get account information."""
         response = await self._request(API_URL + "accounts")
         if response is None:
@@ -173,7 +171,7 @@ class Airthings:
         json_data = await response.json()
         if json_data is None:
             return None
-        return [account["id"] for account in json_data.get("accounts", [])]
+        return [str(account["id"]) for account in json_data.get("accounts", []) if "id" in account]
 
     async def get_devices(
         self,
@@ -197,7 +195,6 @@ class Airthings:
                 if sn:
                     try:
                         devices[sn] = AirthingsDevice.init_from_response(device)
-                        logging.debug("Initialized AirthingsDevice: %s", devices[sn])
                     except Exception as e:
                         _LOGGER.error("Error initializing AirthingsDevice: %s", e)
                         continue
@@ -209,7 +206,7 @@ class Airthings:
         account_id: str,
         page_number: int = 1,
         is_metric: bool = True,
-    ) -> dict[str, Any] | None:
+    ) -> list[dict[str, Any]] | None:
         """Get sensors for device."""
         response = await self._request(
             API_URL +
@@ -222,21 +219,23 @@ class Airthings:
         # Check if there is a next page
         json_data = await response.json()
         if json_data is None:
-            logging.error("No JSON data received for sensors of account %s", account_id)
             return None
         
         results = json_data.get("results")
         if results is None:
-            logging.error("No results in JSON data for sensors of account %s", account_id)
+            logging.warning(
+                "No results found for sensors of account %s on page %d",
+                account_id, page_number
+            )
             return None
 
         if json_data.get("hasNext"):
-            logging.warning("Fetching next page of sensors for account %s", account_id)
             return json_data + await self.get_sensors(
                 account_id, page_number + 1, is_metric
             )
-        logging.info("Fetched %d devices for account %s on page %d", len(results), account_id, page_number)
-        logging.info("Raw sensor data: %s", results)
+        logging.info(
+            "Fetched sensor data for %d device(s) for account %s on page %d",
+            len(results), account_id, page_number)
         return results
 
     async def _request(
