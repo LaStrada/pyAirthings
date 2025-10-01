@@ -1,4 +1,5 @@
 """Support for Airthings sensor."""
+
 from __future__ import annotations
 
 import asyncio
@@ -31,12 +32,7 @@ class AirthingsAuthError(AirthingsError):
 class Airthings:
     """Airthings data handler."""
 
-    def __init__(
-        self,
-        client_id: str,
-        secret: str,
-        websession: ClientSession
-    ) -> None:
+    def __init__(self, client_id: str, secret: str, websession: ClientSession) -> None:
         """Init Airthings data handler."""
         self._client_id = client_id
         self._secret = secret
@@ -52,7 +48,7 @@ class Airthings:
             if accounts is None:
                 raise AirthingsError("No accounts found")
             self._accounts = accounts
-        
+
         if not self._devices:
             devices = await self.get_devices(self._accounts)
             if devices is None:
@@ -61,10 +57,10 @@ class Airthings:
 
         sensors_data: list[dict[str, Any]] = []
         for account_id in self._accounts:
-            sensors_data += await self.get_sensors(
-                account_id, is_metric=is_metric
-            ) or []
-        
+            sensors_data += (
+                await self.get_sensors(account_id, is_metric=is_metric) or []
+            )
+
         for device in self._devices.values():
             device.sensors = {}
             for sensor in sensors_data:
@@ -81,11 +77,14 @@ class Airthings:
         json_data = await response.json()
         if json_data is None:
             return None
-        return [str(account["id"]) for account in json_data.get("accounts", []) if "id" in account]
+        return [
+            str(account["id"])
+            for account in json_data.get("accounts", [])
+            if "id" in account
+        ]
 
     async def get_devices(
-        self,
-        account_ids: list[str]
+        self, account_ids: list[str]
     ) -> dict[str, AirthingsDevice] | None:
         """Get devices for account."""
         devices: dict[str, AirthingsDevice] = {}
@@ -119,9 +118,9 @@ class Airthings:
     ) -> list[dict[str, Any]] | None:
         """Get sensors for device."""
         response = await self._request(
-            API_URL +
-            f"accounts/{account_id}/sensors" +
-            f"?pageNumber={page_number}&isMetric={is_metric}",
+            API_URL
+            + f"accounts/{account_id}/sensors"
+            + f"?pageNumber={page_number}&isMetric={is_metric}",
         )
         if response is None:
             return None
@@ -130,12 +129,13 @@ class Airthings:
         json_data = await response.json()
         if json_data is None:
             return None
-        
+
         results = json_data.get("results")
         if results is None:
             logging.warning(
                 "No results found for sensors of account %s on page %d",
-                account_id, page_number
+                account_id,
+                page_number,
             )
             return None
 
@@ -145,7 +145,10 @@ class Airthings:
             )
         logging.info(
             "Fetched sensor data for %d device(s) for account %s on page %d",
-            len(results), account_id, page_number)
+            len(results),
+            account_id,
+            page_number,
+        )
         return results
 
     async def _request(
