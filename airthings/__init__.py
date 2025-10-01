@@ -16,27 +16,6 @@ TIMEOUT = 10
 
 
 @dataclass
-class AirthingsLocation:
-    """Airthings location."""
-    account_id: str
-    location_id: str
-    name: str
-
-    @classmethod
-    def init_from_response(
-        cls,
-        account_id: str,
-        response: dict[str, str]
-    ) -> AirthingsLocation:
-        """Class method."""
-        return cls(
-            account_id=account_id,
-            location_id=response.get("id"),
-            name=response.get("name"),
-        )
-
-
-@dataclass
 class AirthingsDevice:
     """Airthings device."""
 
