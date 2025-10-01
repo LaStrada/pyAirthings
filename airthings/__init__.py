@@ -63,64 +63,133 @@ class AirthingsAuthError(AirthingsError):
 class Airthings:
     """Airthings data handler."""
 
-    def __init__(self, client_id: str, secret: str, websession: ClientSession) -> None:
+    def __init__(
+        self,
+        client_id: str,
+        secret: str,
+        websession: ClientSession
+    ) -> None:
         """Init Airthings data handler."""
         self._client_id = client_id
         self._secret = secret
         self._websession = websession
         self._access_token = None
-        self._locations = []
-        self._devices = {}
+        self._accounts: list[str] = []
+        self._devices: dict[str, AirthingsDevice] = {}
 
-    async def update_devices(self) -> dict[str, AirthingsDevice]:
+    async def update_devices(self, is_metric: bool) -> dict[str, AirthingsDevice]:
         """Update and return latest device data per location."""
-        if not self._locations:
-            response = await self._request(API_URL + "locations")
-            if response is None:
-                return {}
-            json_data = await response.json()
-            self._locations = []
-            for location in json_data.get("locations"):
-                self._locations.append(AirthingsLocation.init_from_response(location))
+        if not self._accounts:
+            accounts = await self.get_accounts()
+            if accounts is None:
+                raise AirthingsError("No accounts found")
+            self._accounts = accounts
+        
         if not self._devices:
-            response = await self._request(API_URL + "devices")
-            if response is None:
+            devices = await self.get_devices(self._accounts)
+            if devices is None:
                 return {}
-            json_data = await response.json()
-            self._devices = {}
-            for device in json_data.get("devices"):
-                self._devices[device["id"]] = device
-        res = {}
-        for location in self._locations:
-            if not location.location_id:
+            self._devices = devices
+
+        # TODO: Clean up sensors before updating
+
+        # Update sensors
+        sensors_data: list[dict[str, Any]] = []
+        for account_id in self._accounts:
+            sensors_data += await self.get_sensors(
+                account_id, is_metric=is_metric
+            ) or []
+
+        # Map sensors_data to devices
+        for device in self._devices.values():
+            device.sensors = {}
+            for sensor in sensors_data:
+                if sensor.get("serialNumber") == device.serial_number:
+                    logging.warning("Found sensor data for device %s: %s", device.serial_number, sensor)
+        return self._devices
+
+    async def get_accounts(self) -> dict[str] | None:
+        """Get account information."""
+        response = await self._request(API_URL + "accounts")
+        if response is None:
+            return None
+
+        json_data = await response.json()
+        if json_data is None:
+            return None
+        return [account["id"] for account in json_data.get("accounts", [])]
+
+    async def get_devices(
+        self,
+        account_ids: list[str]
+    ) -> dict[str, AirthingsDevice] | None:
+        """Get devices for account."""
+        devices: dict[str, AirthingsDevice] = {}
+
+        for account_id in account_ids:
+            response = await self._request(API_URL + f"accounts/{account_id}/devices")
+
+            if response is None:
                 continue
 
-            response = await self._request(
-                API_URL + f"locations/{location.location_id}/latest-samples"
-            )
-            if response is None:
-                continue
             json_data = await response.json()
             if json_data is None:
                 continue
-            if devices := json_data.get("devices"):
-                for device in devices:
-                    device_id = device.get("id")
-                    res[device_id] = AirthingsDevice.init_from_response(
-                        device, location.name, self._devices.get(device_id)
-                    )
-            else:
-                _LOGGER.debug("No devices in location '%s'", location.name)
-        return res
+
+            for device in json_data.get("devices", []):
+                sn = device.get("serialNumber")
+                if sn:
+                    try:
+                        devices[sn] = AirthingsDevice.init_from_response(device)
+                        logging.debug("Initialized AirthingsDevice: %s", devices[sn])
+                    except Exception as e:
+                        _LOGGER.error("Error initializing AirthingsDevice: %s", e)
+                        continue
+
+        return devices
+
+    async def get_sensors(
+        self,
+        account_id: str,
+        page_number: int = 1,
+        is_metric: bool = True,
+    ) -> dict[str, Any] | None:
+        """Get sensors for device."""
+        response = await self._request(
+            API_URL +
+            f"accounts/{account_id}/sensors" +
+            f"?pageNumber={page_number}&isMetric={is_metric}",
+        )
+        if response is None:
+            return None
+
+        # Check if there is a next page
+        json_data = await response.json()
+        if json_data is None:
+            logging.error("No JSON data received for sensors of account %s", account_id)
+            return None
+        
+        results = json_data.get("results")
+        if results is None:
+            logging.error("No results in JSON data for sensors of account %s", account_id)
+            return None
+
+        if json_data.get("hasNext"):
+            logging.warning("Fetching next page of sensors for account %s", account_id)
+            return json_data + await self.get_sensors(
+                account_id, page_number + 1, is_metric
+            )
+        logging.info("Fetched %d devices for account %s on page %d", len(results), account_id, page_number)
+        logging.info("Raw sensor data: %s", results)
+        return results
 
     async def _request(
         self,
         url: str,
-        json_data: dict[str, Any] | None = None,
         retry: int = 3,
     ) -> ClientResponse | None:
         """Make a request to Airthings API."""
-        _LOGGER.debug("Request %s (retry=%s) payload=%s", url, retry, json_data)
+        _LOGGER.debug("Request %s", url)
 
         if self._access_token is None:
             self._access_token = await get_token(
@@ -133,23 +202,17 @@ class Airthings:
 
         try:
             async with async_timeout.timeout(TIMEOUT):
-                if json_data:
-                    response = await self._websession.post(
-                        url, json=json_data, headers=headers
-                    )
-                else:
-                    response = await self._websession.get(url, headers=headers)
+                response = await self._websession.get(url, headers=headers)
             if response.status != 200:
                 if retry > 0 and response.status != 429:
                     self._access_token = None
-                    return await self._request(url, json_data, retry=retry - 1)
-                _LOGGER.error(
-                    "Error connecting to Airthings, response: %s %s",
-                    response.status,
-                    response.reason,
-                )
+                    return await self._request(url, retry=retry - 1)
+                logging
                 raise AirthingsError(
-                    f"Error connecting to Airthings, response: {response.reason}"
+                    f"Error connecting to Airthings, url: {url}, "
+                    f"status: {response.status}, "
+                    f"headers: {response.headers}, "
+                    f"response: {response.reason}"
                 )
         except ClientError as err:
             self._access_token = None
@@ -161,7 +224,7 @@ class Airthings:
                 _LOGGER.warning(
                     "Timeout talking to Airthings. Retrying… (%d left)", retry
                 )
-                return await self._request(url, json_data, retry=retry - 1)
+                return await self._request(url, retry=retry - 1)
             _LOGGER.error("Timed out when connecting to Airthings")
             raise AirthingsError from err
         return response
@@ -212,4 +275,5 @@ async def get_token(
         raise AirthingsAuthError(f"Failed to login to retrieve token {response.reason}")
 
     data = await response.json()
+    logging.debug("Airthings token response: %s", data)
     return data.get("access_token")
