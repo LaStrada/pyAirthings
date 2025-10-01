@@ -12,6 +12,7 @@ import async_timeout
 _LOGGER = logging.getLogger(__name__)
 
 API_URL = "https://consumer-api.airthings.com/v1/"
+ACCOUNTS_URL = "https://accounts-api.airthings.com/v1/token"
 TIMEOUT = 10
 
 
@@ -296,7 +297,7 @@ async def get_token(
     try:
         async with async_timeout.timeout(timeout):
             response = await websession.post(
-                "https://accounts-api.airthings.com/v1/token",
+                ACCOUNTS_URL,
                 headers={
                     "Content-type": "application/x-www-form-urlencoded",
                     "Accept": "application/json",
