@@ -177,6 +177,9 @@ class Airthings:
         except asyncio.TimeoutError as err:
             self._access_token = None
             if retry > 0:
+                _LOGGER.warning(
+                    "Timeout talking to Airthings. Retrying… (%d left)", retry
+                )
                 return await self._request(url, json_data, retry=retry - 1)
             _LOGGER.error("Timed out when connecting to Airthings")
             raise AirthingsError from err
@@ -207,11 +210,15 @@ async def get_token(
             )
     except ClientError as err:
         if retry > 0:
+            _LOGGER.warning(
+                "Token request failed (%s). Retrying… (%d left)", err, retry
+            )
             return await get_token(websession, client_id, secret, retry - 1, timeout)
         _LOGGER.error("Error getting token Airthings: %s", err, exc_info=True)
         raise AirthingsConnectionError from err
     except asyncio.TimeoutError as err:
         if retry > 0:
+            _LOGGER.warning("Token request timed out. Retrying… (%d left)", retry)
             return await get_token(websession, client_id, secret, retry - 1, timeout)
         _LOGGER.error("Timed out when connecting to Airthings for token")
         raise AirthingsConnectionError from err
