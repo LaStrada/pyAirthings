@@ -11,21 +11,26 @@ import async_timeout
 
 _LOGGER = logging.getLogger(__name__)
 
-API_URL = "https://ext-api.airthings.com/v1/"
+API_URL = "https://consumer-api.airthings.com/v1/"
 TIMEOUT = 10
 
 
 @dataclass
 class AirthingsLocation:
     """Airthings location."""
-
+    account_id: str
     location_id: str
     name: str
 
     @classmethod
-    def init_from_response(cls, response: dict[str, str]) -> AirthingsLocation:
+    def init_from_response(
+        cls,
+        account_id: str,
+        response: dict[str, str]
+    ) -> AirthingsLocation:
         """Class method."""
         return cls(
+            account_id=account_id,
             location_id=response.get("id"),
             name=response.get("name"),
         )
