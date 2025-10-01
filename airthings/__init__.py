@@ -19,31 +19,28 @@ TIMEOUT = 10
 class AirthingsDevice:
     """Airthings device."""
 
-    device_id: str
+    serial_number: str
+    home: str | None
     name: str
-    sensors: dict[str, float | None]
-    is_active: bool
-    location_name: str
-    device_type: str | None
-    product_name: str | None
+    type: str
+    sensors: dict[str, float | None] = None
 
     @classmethod
     def init_from_response(
         cls,
         response: dict,
-        location_name: str,
-        device: dict[str, Any],
     ) -> AirthingsDevice:
         """Class method."""
         return cls(
-            device_id=response.get("id"),
-            name=response.get("segment").get("name"),
-            sensors=response.get("data"),
-            is_active=response.get("segment").get("isActive"),
-            location_name=location_name,
-            device_type=device.get("deviceType"),
-            product_name=device.get("productName"),
+            serial_number=response.get("serialNumber"),
+            home=response.get("home"),
+            name=response.get("name"),
+            type=response.get("type"),
         )
+
+    def update_sensors(self, sensors: dict[str, float | None]) -> None:
+        """Update sensors."""
+        self.sensors = sensors
 
     @property
     def sensor_types(self) -> set[str]:
