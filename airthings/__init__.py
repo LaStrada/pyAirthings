@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import json
 import logging
 
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientResponse, ClientSession
 import async_timeout
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,11 +18,12 @@ TIMEOUT = 10
 @dataclass
 class AirthingsLocation:
     """Airthings location."""
+
     location_id: str
     name: str
 
     @classmethod
-    def init_from_response(cls, response):
+    def init_from_response(cls, response) -> AirthingsLocation:
         """Class method."""
         return cls(
             response.get("id"),
@@ -33,6 +34,7 @@ class AirthingsLocation:
 @dataclass
 class AirthingsDevice:
     """Airthings device."""
+
     device_id: str
     name: str
     sensors: dict[str, float | None]
@@ -42,7 +44,7 @@ class AirthingsDevice:
     product_name: str | None
 
     @classmethod
-    def init_from_response(cls, response, location_name, device):
+    def init_from_response(cls, response, location_name, device) -> AirthingsDevice:
         """Class method."""
         return cls(
             response.get("id"),
@@ -50,12 +52,12 @@ class AirthingsDevice:
             response.get("data"),
             response.get("segment").get("isActive"),
             location_name,
-            device.get('deviceType'),
-            device.get('productName'),
+            device.get("deviceType"),
+            device.get("productName"),
         )
 
     @property
-    def sensor_types(self):
+    def sensor_types(self) -> set[str]:
         """Sensor types."""
         return self.sensors.keys()
 
@@ -75,7 +77,7 @@ class AirthingsAuthError(AirthingsError):
 class Airthings:
     """Airthings data handler."""
 
-    def __init__(self, client_id, secret, websession):
+    def __init__(self, client_id: str, secret: str, websession: ClientSession) -> None:
         """Init Airthings data handler."""
         self._client_id = client_id
         self._secret = secret
@@ -84,7 +86,7 @@ class Airthings:
         self._locations = []
         self._devices = {}
 
-    async def update_devices(self):
+    async def update_devices(self) -> dict[str, AirthingsDevice]:
         """Update data."""
         if not self._locations:
             response = await self._request(API_URL + "locations")
@@ -97,7 +99,7 @@ class Airthings:
             json_data = await response.json()
             self._devices = {}
             for device in json_data.get("devices"):
-                self._devices[device['id']] = device
+                self._devices[device["id"]] = device
         res = {}
         for location in self._locations:
             if not location.location_id:
@@ -112,17 +114,21 @@ class Airthings:
                 continue
             if devices := json_data.get("devices"):
                 for device in devices:
-                    id = device.get('id')
+                    id = device.get("id")
                     res[id] = AirthingsDevice.init_from_response(
-                        device,
-                        location.name,
-                        self._devices.get(id)
+                        device, location.name, self._devices.get(id)
                     )
             else:
                 _LOGGER.debug("No devices in location '%s'", location.name)
         return res
 
-    async def _request(self, url, json_data=None, retry=3):
+    async def _request(
+        self,
+        url: str,
+        json_data: any | None = None,
+        retry: int = 3
+    ) -> list[ClientResponse] | None:
+        """Make a request to Airthings API."""
         _LOGGER.debug("Request %s %s, %s", url, retry, json_data)
         if self._access_token is None:
             self._access_token = await get_token(
@@ -165,7 +171,13 @@ class Airthings:
         return response
 
 
-async def get_token(websession, client_id, secret, retry=3, timeout=10):
+async def get_token(
+    websession: ClientSession,
+    client_id: str,
+    secret: str,
+    retry: int = 3,
+    timeout: float = 10,
+) -> list[str] | None:
     """Get token for Airthings."""
     try:
         async with async_timeout.timeout(timeout):
