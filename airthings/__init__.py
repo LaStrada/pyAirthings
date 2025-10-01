@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-import json
 import logging
+from typing import Any
 
 from aiohttp import ClientError, ClientResponse, ClientSession
 import async_timeout
@@ -23,11 +23,11 @@ class AirthingsLocation:
     name: str
 
     @classmethod
-    def init_from_response(cls, response) -> AirthingsLocation:
+    def init_from_response(cls, response: dict[str, str]) -> AirthingsLocation:
         """Class method."""
         return cls(
-            response.get("id"),
-            response.get("name"),
+            location_id=response.get("id"),
+            name=response.get("name"),
         )
 
 
@@ -44,22 +44,27 @@ class AirthingsDevice:
     product_name: str | None
 
     @classmethod
-    def init_from_response(cls, response, location_name, device) -> AirthingsDevice:
+    def init_from_response(
+        cls,
+        response: dict,
+        location_name: str,
+        device: dict[str, Any],
+    ) -> AirthingsDevice:
         """Class method."""
         return cls(
-            response.get("id"),
-            response.get("segment").get("name"),
-            response.get("data"),
-            response.get("segment").get("isActive"),
-            location_name,
-            device.get("deviceType"),
-            device.get("productName"),
+            device_id=response.get("id"),
+            name=response.get("segment").get("name"),
+            sensors=response.get("data"),
+            is_active=response.get("segment").get("isActive"),
+            location_name=location_name,
+            device_type=device.get("deviceType"),
+            product_name=device.get("productName"),
         )
 
     @property
     def sensor_types(self) -> set[str]:
         """Sensor types."""
-        return self.sensors.keys()
+        return set(self.sensors)
 
 
 class AirthingsError(Exception):
@@ -87,15 +92,19 @@ class Airthings:
         self._devices = {}
 
     async def update_devices(self) -> dict[str, AirthingsDevice]:
-        """Update data."""
+        """Update and return latest device data per location."""
         if not self._locations:
             response = await self._request(API_URL + "locations")
+            if response is None:
+                return {}
             json_data = await response.json()
             self._locations = []
             for location in json_data.get("locations"):
                 self._locations.append(AirthingsLocation.init_from_response(location))
         if not self._devices:
             response = await self._request(API_URL + "devices")
+            if response is None:
+                return {}
             json_data = await response.json()
             self._devices = {}
             for device in json_data.get("devices"):
@@ -104,8 +113,9 @@ class Airthings:
         for location in self._locations:
             if not location.location_id:
                 continue
+
             response = await self._request(
-                API_URL + f"/locations/{location.location_id}/latest-samples"
+                API_URL + f"locations/{location.location_id}/latest-samples"
             )
             if response is None:
                 continue
@@ -114,9 +124,9 @@ class Airthings:
                 continue
             if devices := json_data.get("devices"):
                 for device in devices:
-                    id = device.get("id")
-                    res[id] = AirthingsDevice.init_from_response(
-                        device, location.name, self._devices.get(id)
+                    device_id = device.get("id")
+                    res[device_id] = AirthingsDevice.init_from_response(
+                        device, location.name, self._devices.get(device_id)
                     )
             else:
                 _LOGGER.debug("No devices in location '%s'", location.name)
@@ -125,11 +135,12 @@ class Airthings:
     async def _request(
         self,
         url: str,
-        json_data: any | None = None,
-        retry: int = 3
-    ) -> list[ClientResponse] | None:
+        json_data: dict[str, Any] | None = None,
+        retry: int = 3,
+    ) -> ClientResponse | None:
         """Make a request to Airthings API."""
-        _LOGGER.debug("Request %s %s, %s", url, retry, json_data)
+        _LOGGER.debug("Request %s (retry=%s) payload=%s", url, retry, json_data)
+
         if self._access_token is None:
             self._access_token = await get_token(
                 self._websession, self._client_id, self._secret
@@ -137,7 +148,8 @@ class Airthings:
             if self._access_token is None:
                 return None
 
-        headers = {"Authorization": self._access_token}
+        headers = {"Authorization": f"Bearer {self._access_token}"}
+
         try:
             async with async_timeout.timeout(TIMEOUT):
                 if json_data:
@@ -160,7 +172,7 @@ class Airthings:
                 )
         except ClientError as err:
             self._access_token = None
-            _LOGGER.error("Error connecting to Airthings: %s ", err, exc_info=True)
+            _LOGGER.error("Error connecting to Airthings: %s", err, exc_info=True)
             raise AirthingsError from err
         except asyncio.TimeoutError as err:
             self._access_token = None
@@ -176,8 +188,8 @@ async def get_token(
     client_id: str,
     secret: str,
     retry: int = 3,
-    timeout: float = 10,
-) -> list[str] | None:
+    timeout: float = TIMEOUT,
+) -> str | None:
     """Get token for Airthings."""
     try:
         async with async_timeout.timeout(timeout):
@@ -196,7 +208,7 @@ async def get_token(
     except ClientError as err:
         if retry > 0:
             return await get_token(websession, client_id, secret, retry - 1, timeout)
-        _LOGGER.error("Error getting token Airthings: %s ", err, exc_info=True)
+        _LOGGER.error("Error getting token Airthings: %s", err, exc_info=True)
         raise AirthingsConnectionError from err
     except asyncio.TimeoutError as err:
         if retry > 0:
@@ -210,5 +222,6 @@ async def get_token(
             response.reason,
         )
         raise AirthingsAuthError(f"Failed to login to retrieve token {response.reason}")
-    token_data = json.loads(await response.text())
-    return token_data.get("access_token")
+
+    data = await response.json()
+    return data.get("access_token")
