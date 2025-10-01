@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from .AirthingsSensor import AirthingsSensor
 
 
 @dataclass
@@ -14,7 +13,7 @@ class AirthingsSensor:
     def init_from_response(
         cls,
         response: dict[str, float | str | None],
-    ) -> list[AirthingsSensor]:
+    ) -> list["AirthingsSensor"]:
         """Initialize sensors from response."""
         return cls(
             type=response.get("sensorType"),
