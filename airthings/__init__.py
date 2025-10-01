@@ -147,8 +147,6 @@ class Airthings:
                 return {}
             self._devices = devices
 
-        # TODO: Clean up sensors before updating
-
         sensors_data: list[dict[str, Any]] = []
         for account_id in self._accounts:
             sensors_data += await self.get_sensors(
@@ -262,7 +260,6 @@ class Airthings:
                 if retry > 0 and response.status != 429:
                     self._access_token = None
                     return await self._request(url, retry=retry - 1)
-                logging
                 raise AirthingsError(
                     f"Error connecting to Airthings, url: {url}, "
                     f"status: {response.status}, "
