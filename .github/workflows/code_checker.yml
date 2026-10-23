@@ -2,7 +2,16 @@ name: Code checker
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   validate:
@@ -12,8 +21,11 @@ jobs:
         python-version:
           - "3.13"
           - "3.14"
+          - "3.15"
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -25,7 +37,7 @@ jobs:
           key: ${{ matrix.python-version }}-${{ hashFiles('setup.py') }}
       - name: Install dependencies
         run: |
-            pip install aiohttp
+            pip install -e .
             pip install dlint flake8 flake8-bandit flake8-bugbear flake8-deprecated flake8-executable isort pylint pytest pytest-asyncio pytest-cov
       - name: Flake8 Code Linter
         run: |
