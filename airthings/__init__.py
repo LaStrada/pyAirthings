@@ -18,20 +18,25 @@ CACHE_TTL = 3600
 MAX_PAGES = 100
 
 PRODUCT_NAMES = {
-    "AP_1": "Renew air purifier",
+    "AP_1": "Renew",
     "HOME": "Corentium Home",
-    "HOME_COLIBRI": "Home Colibri",
-    "HUB": "Hub",
-    "RAVEN_RADON": "Raven Radon",
+    "RAVEN_RADON": "Corentium Home 2",
     "VIEW_PLUS": "View Plus",
     "VIEW_POLLUTION": "View Pollution",
     "VIEW_RADON": "View Radon",
-    "WAVE": "Wave",
+    "WAVE": "Wave Gen 1",
     "WAVE_ENHANCE": "Wave Enhance",
-    "WAVE_GEN2": "Wave",
+    "WAVE_GEN2": "Wave Radon",
     "WAVE_MINI": "Wave Mini",
     "WAVE_PLUS": "Wave Plus",
 }
+
+
+def product_name(device_type: str | None) -> str | None:
+    """Return the product name for an Airthings device type."""
+    if not isinstance(device_type, str) or not device_type:
+        return None
+    return PRODUCT_NAMES.get(device_type, device_type.replace("_", " ").title())
 
 
 def _parse_timestamp(value) -> datetime | None:
@@ -91,7 +96,7 @@ class AirthingsDevice:
             True,
             location_name,
             device_type,
-            PRODUCT_NAMES.get(device_type),
+            product_name(device_type),
             _parse_timestamp(response.get("recorded")),
         )
 

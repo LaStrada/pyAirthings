@@ -21,6 +21,7 @@ from airthings import (
     AirthingsLocation,
     AirthingsNotFoundError,
     get_token,
+    product_name,
 )
 
 
@@ -241,7 +242,7 @@ async def test_update_devices_refreshes_when_device_is_added(clock, caplog) -> N
         result = await airthings.update_devices()
 
     assert result["2950000002"].name == "Basement"
-    assert result["2950000002"].product_name == "Wave"
+    assert result["2950000002"].product_name == "Wave Radon"
     assert cloud.count("/devices") == 2
     assert "Unknown device '2950000002', refreshing cache" in caplog.text
 
@@ -608,12 +609,31 @@ async def test_update_devices_keeps_whole_cache_when_refresh_fails(clock) -> Non
 
 @pytest.mark.parametrize(
     ("device_type", "expected"),
-    [("RAVEN_RADON", "Raven Radon"), ("AP_1", "Renew air purifier"), ("WAVE_GEN2", "Wave"), ("NEW_THING", None)],
+    [
+        ("AP_1", "Renew"),
+        ("HOME", "Corentium Home"),
+        ("RAVEN_RADON", "Corentium Home 2"),
+        ("VIEW_PLUS", "View Plus"),
+        ("VIEW_POLLUTION", "View Pollution"),
+        ("VIEW_RADON", "View Radon"),
+        ("WAVE", "Wave Gen 1"),
+        ("WAVE_ENHANCE", "Wave Enhance"),
+        ("WAVE_GEN2", "Wave Radon"),
+        ("WAVE_MINI", "Wave Mini"),
+        ("WAVE_PLUS", "Wave Plus"),
+        ("NEW_THING", "New Thing"),
+        (None, None),
+        ("", None),
+        (42, None),
+    ],
 )
-def test_device_product_name(device_type: str, expected: str | None) -> None:
-    device = AirthingsDevice.init_from_response({"serialNumber": "1"}, "", {"type": device_type})
+def test_product_name(device_type: str | None, expected: str | None) -> None:
+    assert product_name(device_type) == expected
 
-    assert device.product_name == expected
+
+@pytest.mark.parametrize(("device", "expected"), [({"type": "RAVEN_RADON"}, "Corentium Home 2"), ({"type": "NEW_THING"}, "New Thing"), ({}, None)])
+def test_device_uses_product_name(device: dict, expected: str | None) -> None:
+    assert AirthingsDevice.init_from_response({"serialNumber": "1"}, "", device).product_name == expected
 
 
 @pytest.mark.parametrize(
