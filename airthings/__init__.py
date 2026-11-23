@@ -33,6 +33,13 @@ PRODUCT_NAMES = {
 }
 
 
+def _product_name(device) -> str | None:
+    product_name = device.get("productName")
+    if isinstance(product_name, str) and product_name:
+        return product_name
+    return PRODUCT_NAMES.get(device.get("type"))
+
+
 @dataclass
 class AirthingsLocation:
     """Airthings location."""
@@ -77,7 +84,7 @@ class AirthingsDevice:
             True,
             location_name,
             device_type,
-            PRODUCT_NAMES.get(device_type),
+            _product_name(device),
         )
 
     @property

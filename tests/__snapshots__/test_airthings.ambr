@@ -119,7 +119,7 @@
       is_active=True,
       location_name='Home',
       name='Raven Radon',
-      product_name='Raven Radon',
+      product_name='Corentium Home 2',
       sensors=dict({
         'battery': 62,
         'humidity': 41.0,

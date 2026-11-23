@@ -605,13 +605,21 @@ async def test_update_devices_keeps_whole_cache_when_refresh_fails(clock) -> Non
 
 
 @pytest.mark.parametrize(
-    ("device_type", "expected"),
-    [("RAVEN_RADON", "Raven Radon"), ("AP_1", "Renew air purifier"), ("WAVE_GEN2", "Wave"), ("NEW_THING", None)],
+    ("device", "expected"),
+    [
+        ({"type": "RAVEN_RADON", "productName": "Corentium Home 2"}, "Corentium Home 2"),
+        ({"type": "NEW_THING", "productName": "New Thing"}, "New Thing"),
+        ({"type": "RAVEN_RADON"}, "Raven Radon"),
+        ({"type": "RAVEN_RADON", "productName": None}, "Raven Radon"),
+        ({"type": "AP_1", "productName": ""}, "Renew air purifier"),
+        ({"type": "WAVE_GEN2", "productName": 42}, "Wave"),
+        ({"type": "NEW_THING"}, None),
+    ],
 )
-def test_device_product_name(device_type: str, expected: str | None) -> None:
-    device = AirthingsDevice.init_from_response({"serialNumber": "1"}, "", {"type": device_type})
+def test_device_product_name(device: dict, expected: str | None) -> None:
+    result = AirthingsDevice.init_from_response({"serialNumber": "1"}, "", device)
 
-    assert device.product_name == expected
+    assert result.product_name == expected
 
 
 def test_device_without_metadata_or_readings() -> None:
